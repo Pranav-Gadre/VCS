@@ -28,6 +28,17 @@
 //  * The second request will not have the atomic_i input asserted
 //
 
+	/*
+	DESIGN THINKING:
+
+
+
+
+	*/
+
+
+
+
 
 
 module atomic_counters (
