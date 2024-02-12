@@ -27,12 +27,33 @@
 //  * The first request will always have the atomic_i input asserted
 //  * The second request will not have the atomic_i input asserted
 //
+//	Please note that the testbench preloads the counter for this problem to test interesting scenarios.
+//
 
 	/*
 	DESIGN THINKING:
-
-
-
+	
+	QUESTIONS:
+	
+	* Will trigger be a single cycle or a multi cycle event?
+	* If multi cycle trigger is detected, should I keep incrementing the counter?
+	* What happens when trigger and request are simultaneously asserted?
+	* In case of back to back multiple multiple requests, is there at least 
+	  a single cycle gap b/w them?
+	* If req_i stays high even after 2 cycles and atomic_i gets asserted at cycle
+	  3 (1, 2, 3), will we consider this as the next read request?
+	  
+	* How the testbench is going to preload the counter, which is inside the design? 
+	  I can use this feature to create good testbenches of my own.
+	
+	
+	
+	CAVEATS:
+	
+	
+	EDGE CASES:
+	* When the count value crosses the LOWER 32 bits and updates the value in UPPER 32 bits.
+	* Need to know at what interval, will the above situation will occur?
 
 	*/
 
