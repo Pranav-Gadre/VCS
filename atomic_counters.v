@@ -35,17 +35,40 @@
 	
 	QUESTIONS:
 	
+	* What is the meaning of single-copy atomic here?
 	* Will trigger be a single cycle or a multi cycle event?
 	* If multi cycle trigger is detected, should I keep incrementing the counter?
 	* What happens when trigger and request are simultaneously asserted?
 	* In case of back to back multiple multiple requests, is there at least 
-	  a single cycle gap b/w them?
+	  a single cycle gap b/w them? I don't think so because In events to APB, there's a point:
+	  
+	  ** Back to back APB transactions aren't supported by interface 
+	     hence there should a cycle gap before the next APB transaction is generated
+	
 	* If req_i stays high even after 2 cycles and atomic_i gets asserted at cycle
 	  3 (1, 2, 3), will we consider this as the next read request?
+	  
+	* What happens when multiple REQs and multiple Triggers appear simultaneously?
+	  
+	  ** What happens when code is in FIRST state and trigger appears?
+	  ** What happens when code is in SECOND state and trigger appears?
+	  ** Does the output FSM require an IDLE state?
+	  ** If you create an FSM, what is value of output going to be in each state?
 	  
 	* How the testbench is going to preload the counter, which is inside the design? 
 	  I can use this feature to create good testbenches of my own.
 	
+	Givens and Observations:
+	
+	* REQ will at least be 2 consecutive cycles wide. 
+	* The count_o value is 0x0 even after the REQ has de-asserted. Which means that the 
+	  output remembers the last value driven, eg: UPPER HALF of the 64-bit value unless 
+	  the new REQ appears. 
+	
+	Assumptions:
+	
+	* If multiple REQ come without a cycle gap, will have to use atomic_i to differentiate
+	  b/w 2 consecutive REQs. Assertion of atomic_i will mark as the next consecutive REQ
 	
 	
 	CAVEATS:
@@ -54,7 +77,21 @@
 	EDGE CASES:
 	* When the count value crosses the LOWER 32 bits and updates the value in UPPER 32 bits.
 	* Need to know at what interval, will the above situation will occur?
-
+	
+	FSM SPEC:
+	
+	FIRST: (acts as IDLE)
+	* When no REQ, be in the IDLE state. 
+	* IF (REQ_i && atomic_i) go to FIRST state. count_o be NBA assigned the LOWER HALF value.
+	* ELSE remain in IDLE state. count_o retains whatever was the previous value.
+	
+	SECOND: 
+	* By default, REQ_i will be HIGH, and the atomic_i will be LOW. No need to check it.
+	* count_o be NBA assigned the UPPER HALF value. 
+	* FSM will be here only for one cycle.
+	* Go back to IDLE without sticking here around. 
+	
+	
 	*/
 
 
@@ -72,20 +109,34 @@ module atomic_counters (
   output wire[31:0]      count_o
 );
 
-  wire [63:0] count;
+	wire [63:0] count;
 
-  // --------------------------------------------------------
-  // DO NOT CHANGE ANYTHING HERE
-  // --------------------------------------------------------
-  reg  [63:0] count_q;
+	// --------------------------------------------------------
+	// DO NOT CHANGE ANYTHING HERE
+	// --------------------------------------------------------
+	reg  [63:0] count_q;
 
-  always_ff @(posedge clk or posedge reset)
-    if (reset)
-      count_q[63:0] <= 64'h0;
-    else
-      count_q[63:0] <= count;
-  // --------------------------------------------------------
+	always_ff @(posedge clk or posedge reset)
+	if (reset)
+		count_q[63:0] <= 64'h0;
+	else
+		count_q[63:0] <= count;
+	// --------------------------------------------------------
 
-  // Write your logic here
+	// Write your logic here
+	reg  [63:0] counter;
+	reg  ack;
+	
+	localparam [1:0] FIRST  = 2'd0;
+	localparam [1:0] SECOND = 2'd1; 
+	
+	always_ff @(posedge clk or posedge reset) begin 
+		if (reset) begin 
+			ack     <= 0;
+			counter <= 0;
+		end else begin
+			counter <= (trig_i) ? counter + 1 : counter;
+		end
+	end 
 
 endmodule
