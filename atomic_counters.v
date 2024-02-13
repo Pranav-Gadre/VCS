@@ -55,6 +55,9 @@
 	  ** Does the output FSM require an IDLE state?
 	  ** If you create an FSM, what is value of output going to be in each state?
 	  
+	* What happens if 4 REQs come consecutively? Will the ack_o be asserted for 
+	  four cycles with a cycle of delay?
+	  
 	* How the testbench is going to preload the counter, which is inside the design? 
 	  I can use this feature to create good testbenches of my own.
 	
@@ -73,7 +76,10 @@
 	
 	CAVEATS:
 	
-	
+	* Marks whether the current request is the first part of the two 32-bit accesses to read
+	  the 64-bit counter. Use this input to save the current value of the upper 32-bit of
+	  the counter in-order to ensure single-copy atomic operation.
+
 	EDGE CASES:
 	* When the count value crosses the LOWER 32 bits and updates the value in UPPER 32 bits.
 	* Need to know at what interval, will the above situation will occur?
@@ -83,11 +89,14 @@
 	FIRST: (acts as IDLE)
 	* When no REQ, be in the IDLE state. 
 	* IF (REQ_i && atomic_i) go to FIRST state. count_o be NBA assigned the LOWER HALF value.
+      ack_o be NBA assigned HIGH
 	* ELSE remain in IDLE state. count_o retains whatever was the previous value.
+	  ack_o be NBA assigned LOW
 	
 	SECOND: 
 	* By default, REQ_i will be HIGH, and the atomic_i will be LOW. No need to check it.
 	* count_o be NBA assigned the UPPER HALF value. 
+	* ack_o be NBA assigned HIGH or you can latch out the previous value (HIGH)
 	* FSM will be here only for one cycle.
 	* Go back to IDLE without sticking here around. 
 	
@@ -125,17 +134,49 @@ module atomic_counters (
 
 	// Write your logic here
 	reg  [63:0] counter;
+	reg  [31:0] counter_32b;
+	reg  [1:0] state;
 	reg  ack;
 	
 	localparam [1:0] FIRST  = 2'd0;
 	localparam [1:0] SECOND = 2'd1; 
 	
+	assign count   = counter; 
+	assign ack_o   = ack;
+	assign count_o = counter_32b;       
+	
 	always_ff @(posedge clk or posedge reset) begin 
 		if (reset) begin 
-			ack     <= 0;
 			counter <= 0;
 		end else begin
 			counter <= (trig_i) ? counter + 1 : counter;
+		end
+	end 
+	
+	always_ff @(posedge clk or posedge reset) begin 
+		if (reset) begin 
+			counter_32b <= 0;
+			ack		    <= 0;
+			state		<= 0;
+		end else begin
+			case (state) 
+			FIRST : begin 
+				if (req_i && atomic_i) begin 
+					state     	<= SECOND;
+					counter_32b <= counter[31:0];
+					ack_o		<= 1;
+				end else begin
+					state 		<= FIRST;
+					counter_32b <= counter_32b;
+					ack_o       <= 0;
+				end 
+			end 
+			SECOND: begin 
+				state		<= FIRST
+				counter_32b	<= counter[63:32]; // wrong
+				ack_o		<= 1;
+			end
+			endcase
 		end
 	end 
 
