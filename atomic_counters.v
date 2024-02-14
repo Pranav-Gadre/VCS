@@ -57,6 +57,9 @@
 	  
 	* What happens if 4 REQs come consecutively? Will the ack_o be asserted for 
 	  four cycles with a cycle of delay?
+	
+	* How do I capture the 64 bit value at (REQ && atomic_i) and store it so that 
+	  it can be used after a cycle?
 	  
 	* How the testbench is going to preload the counter, which is inside the design? 
 	  I can use this feature to create good testbenches of my own.
@@ -73,12 +76,13 @@
 	* If multiple REQ come without a cycle gap, will have to use atomic_i to differentiate
 	  b/w 2 consecutive REQs. Assertion of atomic_i will mark as the next consecutive REQ
 	
-	
 	CAVEATS:
 	
 	* Marks whether the current request is the first part of the two 32-bit accesses to read
-	  the 64-bit counter. Use this input to save the current value of the upper 32-bit of
+	  the 64-bit counter. (VVIMP) Use this input to save the current value of the upper 32-bit of
 	  the counter in-order to ensure single-copy atomic operation.
+	  
+	* count_o value at cycle T13.
 
 	EDGE CASES:
 	* When the count value crosses the LOWER 32 bits and updates the value in UPPER 32 bits.
@@ -134,7 +138,8 @@ module atomic_counters (
 
 	// Write your logic here
 	reg  [63:0] counter;
-	reg  [31:0] counter_32b;
+	reg  [31:0] counter_32_upp;
+	reg  [31:0] counter_32_low;
 	reg  [1:0] state;
 	reg  ack;
 	
@@ -143,7 +148,7 @@ module atomic_counters (
 	
 	assign count   = counter; 
 	assign ack_o   = ack;
-	assign count_o = counter_32b;       
+	assign count_o = counter_32_low;       
 	
 	always_ff @(posedge clk or posedge reset) begin 
 		if (reset) begin 
@@ -155,26 +160,30 @@ module atomic_counters (
 	
 	always_ff @(posedge clk or posedge reset) begin 
 		if (reset) begin 
-			counter_32b <= 0;
-			ack		    <= 0;
-			state		<= 0;
+			counter_32_low <= 0;
+			counter_32_upp <= 0;
+			ack		       <= 0;
+			state		   <= 0;
 		end else begin
 			case (state) 
 			FIRST : begin 
 				if (req_i && atomic_i) begin 
-					state     	<= SECOND;
-					counter_32b <= counter[31:0];
-					ack_o		<= 1;
+					state     	   <= SECOND;
+					counter_32_low <= counter[31:0];
+					counter_32_upp <= counter[63:32];
+					ack			   <= 1;
 				end else begin
-					state 		<= FIRST;
-					counter_32b <= counter_32b;
-					ack_o       <= 0;
+					state 		   <= FIRST;
+					counter_32_low <= 0;
+					counter_32_upp <= 0;
+					ack	           <= 0;
 				end 
 			end 
 			SECOND: begin 
-				state		<= FIRST
-				counter_32b	<= counter[63:32]; // wrong
-				ack_o		<= 1;
+				state		   <= FIRST;
+				counter_32_low <= counter_32_upp; // may not be wrong
+				counter_32_upp <= counter_32_upp;
+				ack			   <= 1;
 			end
 			endcase
 		end
