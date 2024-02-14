@@ -63,6 +63,15 @@
 	  
 	* How the testbench is going to preload the counter, which is inside the design? 
 	  I can use this feature to create good testbenches of my own.
+	  
+	* How to conditionally load the preloaded count value in my own register?
+	
+	* How the design should respond when REQ is only for 1 cycle?
+	
+	* How the design should respond when REQ is for more than 2 cycle but atomic_i 
+	  appears somewhere in between?
+	  
+	* How the design should respond when atomic_i is HIGH for 2 or more than 2 cycles?
 	
 	Givens and Observations:
 	
@@ -70,6 +79,14 @@
 	* The count_o value is 0x0 even after the REQ has de-asserted. Which means that the 
 	  output remembers the last value driven, eg: UPPER HALF of the 64-bit value unless 
 	  the new REQ appears. 
+	
+	* It seems that the count wire is loaded from the TB.
+	
+	* Need to observe and reason about the exact rising of mismatch signal. 
+	  I think it is related to the 1 cycle and 3 cycle request with mispositioning of 
+	  atomic_i.
+	
+	
 	
 	Assumptions:
 	
@@ -140,11 +157,11 @@ module atomic_counters (
 	reg  [63:0] counter;
 	reg  [31:0] counter_32_upp;
 	reg  [31:0] counter_32_low;
-	reg  [1:0] state;
+	reg  state;
 	reg  ack;
 	
-	localparam [1:0] FIRST  = 2'd0;
-	localparam [1:0] SECOND = 2'd1; 
+	localparam FIRST  = 1'd0;
+	localparam SECOND = 1'd1; 
 	
 	assign count   = counter; 
 	assign ack_o   = ack;
