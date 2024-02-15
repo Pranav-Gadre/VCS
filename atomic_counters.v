@@ -86,7 +86,10 @@
 	  I think it is related to the 1 cycle and 3 cycle request with mispositioning of 
 	  atomic_i.
 	
+	* Focus on ack_exp and count_exp signals, these are the expected outputs.
 	
+	* ack_o is simply a delayed version of REQ signal, no conditionals are required to 
+	  handle it.
 	
 	Assumptions:
 	
@@ -100,6 +103,20 @@
 	  the counter in-order to ensure single-copy atomic operation.
 	  
 	* count_o value at cycle T13.
+	
+	* Request can be a pulse or can get back to back multiple requests
+	
+    * The acknowledge output must be given one cycle after the request is asserted
+   -- Irrespective of WHETHER the atomic_i IS asserted or NOT, ack_o is just a delayed 
+      version of REQ
+    * The controller will always send two requests in order to read the full 64-bit counter
+   -- But it DOES NOT necessarily means that the REQ will be consecutive
+    * The first request will always have the atomic_i input asserted
+   -- Only the REQ that has atomic_i asrted, will be considered FIRST
+      And corresponding DATA be sent
+    * The second request will not have the atomic_i input asserted
+   -- only the REQ that does not have atomic_i asrsted, will be considered SECOND
+      And corresponding DATA be sent
 
 	EDGE CASES:
 	* When the count value crosses the LOWER 32 bits and updates the value in UPPER 32 bits.
