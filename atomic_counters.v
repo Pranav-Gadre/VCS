@@ -73,6 +73,8 @@
 	  
 	* How the design should respond when atomic_i is HIGH for 2 or more than 2 cycles?
 	
+	* How do I negate the one cycle delay because of counter_32_low & counter_32_upp
+	
 	Givens and Observations:
 	
 	* REQ will at least be 2 consecutive cycles wide. 
@@ -110,7 +112,7 @@
    -- Irrespective of WHETHER the atomic_i IS asserted or NOT, ack_o is just a delayed 
       version of REQ
     * The controller will always send two requests in order to read the full 64-bit counter
-   -- But it DOES NOT necessarily means that the REQ will be consecutive
+   -- But it DOES NOT necessarily means that the two REQs will be consecutive
     * The first request will always have the atomic_i input asserted
    -- Only the REQ that has atomic_i asrted, will be considered FIRST
       And corresponding DATA be sent
@@ -176,19 +178,22 @@ module atomic_counters (
 	reg  [31:0] counter_32_low;
 	reg  state;
 	reg  ack;
+	reg  reset_ff;
 	
 	localparam FIRST  = 1'd0;
 	localparam SECOND = 1'd1; 
 	
-	assign count   = counter; 
 	assign ack_o   = ack;
 	assign count_o = counter_32_low;       
 	
-	always_ff @(posedge clk or posedge reset) begin 
+	always_ff @(posedge clk or posedge reset) begin
+		reset_ff <= reset;
 		if (reset) begin 
 			counter <= 0;
 		end else begin
-			counter <= (trig_i) ? counter + 1 : counter;
+			counter <= ((!reset) && reset_ff) ? count : 
+			           (trig_i) ? counter + 1 : counter;
+		//	counter <= (trig_i) ? counter + 1 : counter;
 		end
 	end 
 	
@@ -199,25 +204,27 @@ module atomic_counters (
 			ack		       <= 0;
 			state		   <= 0;
 		end else begin
+			ack	<= req_i;
 			case (state) 
 			FIRST : begin 
 				if (req_i && atomic_i) begin 
 					state     	   <= SECOND;
 					counter_32_low <= counter[31:0];
 					counter_32_upp <= counter[63:32];
-					ack			   <= 1;
+				if (req_i && (!atomic_i)) begin 
+					state		   <= SECOND;
+					counter_32_low <= counter[31:0];
+					counter_32_upp <= 0;
 				end else begin
 					state 		   <= FIRST;
 					counter_32_low <= 0;
 					counter_32_upp <= 0;
-					ack	           <= 0;
 				end 
 			end 
 			SECOND: begin 
 				state		   <= FIRST;
 				counter_32_low <= counter_32_upp; // may not be wrong
 				counter_32_upp <= counter_32_upp;
-				ack			   <= 1;
 			end
 			endcase
 		end
