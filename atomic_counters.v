@@ -116,6 +116,8 @@
       version of REQ
     * The controller will always send two requests in order to read the full 64-bit counter
    -- But it DOES NOT necessarily means that the two REQs will be consecutive
+      But based on the observed TB behaviour, need to accept that the both REQs have to be
+	  consecutive. (look at 165 us in TC2). 
     * The first request will always have the atomic_i input asserted
    -- Only the REQ that has atomic_i asrted, will be considered FIRST
       And corresponding DATA be sent. And UNLESS First REQ comes we are not sending 
@@ -124,7 +126,9 @@
 	  atomic_i, I am not going to output anything.
     * The second request will not have the atomic_i input asserted
    -- only the REQ that does not have atomic_i asrsted, will be considered SECOND
-      And corresponding DATA be sent
+      And corresponding DATA be sent. 
+   -- For a REQ to be considered SECOND, the previous cycle REQ and atomic_i
+      should be HIGH.
 
 	EDGE CASES:
 	* When the count value crosses the LOWER 32 bits and updates the value in UPPER 32 bits.
@@ -181,12 +185,16 @@ module atomic_counters (
 	// Write your logic here
 	reg  [63:0] counter;
 	reg  [31:0] counter_32_upp;
-	reg  [31:0] counter_32_low;
+//	reg  [31:0] counter_32_low; 	// not required anymore
 	reg  state;
 	reg  ack;
+//	reg  ack1;
+	reg  req_i_d;
+	reg  out_en;
 	reg  reset_ff;
 	reg  reset_ff1;
 	reg  low_or_high;
+	wire req_i_posedge;
 	
 	localparam FIRST  = 1'd0;
 	localparam SECOND = 1'd1; 
@@ -195,7 +203,10 @@ module atomic_counters (
 //	assign count_o = counter_32_low;       
 //  How will I do single copy atomic ops with this line below?
 //	assign count_o = (low_or_high) ? counter[31:0] : counter [63:32];
-	assign count_o = (low_or_high) ? counter[31:0] : counter_32_upp;
+	assign count_o = (!out_en) ? 32'd0 :
+					 (low_or_high) ? counter_32_upp : counter[31:0];
+	
+	assign req_i_posedge = (req_i && (!req_i_d));
 	
 	always_ff @(posedge clk or posedge reset) begin
 		reset_ff  <= reset;		// these flops will initially have X as value.		
@@ -212,44 +223,46 @@ module atomic_counters (
 	always_ff @(posedge clk or posedge reset) begin 
 		if (reset) begin 
 			state		   <= 0;
-			counter_32_low <= 0;
 			counter_32_upp <= 0;
 			ack		       <= 0;
+			req_i_d		   <= 0;
+			out_en		   <= 0;
 			low_or_high    <= 0;
 		end else begin
-			ack	<= req_i;
+			ack	    <= req_i;
+			req_i_d <= req_i;
 			case (state) 
 			FIRST : begin 
-				if (req_i && atomic_i) begin 
-					state     	   <= SECOND;
-					low_or_high    <= 0;
-					counter_32_low <= 0;
-					counter_32_upp <= counter[63:32];
-				end else if (req_i && (!atomic_i)) begin 
-					state		   <= SECOND;
-					low_or_high    <= 0;
-					counter_32_low <= 0;
-					counter_32_upp <= 0;
-				end else begin
-					state 		   <= FIRST;
-					low_or_high	   <= 0;
-					counter_32_low <= 0;
-					counter_32_upp <= 0;
-				end 
+                if (req_i && atomic_i) begin 	// Not using req_i_posedge here to allow multiple valid REQ
+                    state     	   <= SECOND;
+                    low_or_high    <= 0;
+					out_en		   <= 1;
+                    counter_32_upp <= counter[63:32];
+                end else if (req_i_posedge && (!atomic_i)) begin // Earlier it was req_i && (!atomic_i))
+                    state		   <= FIRST; // Earlier it was SECOND, Now making it to FIRST
+                    low_or_high    <= 0;	// 	Earlier it was 0, which will out the lower 32 count value
+                    out_en		   <= 0;
+                    counter_32_upp <= 0;
+                end else begin
+                    state 		   <= FIRST;
+                    low_or_high	   <= 0;
+					out_en         <= 0;
+                    counter_32_upp <= 0;
+                end 
 			end 
-			SECOND: begin 
+			SECOND : begin 
 				state		   <= FIRST;
 				if (req_i && (!atomic_i)) begin 
 					low_or_high    <= 1;
-					counter_32_low <= 0; // may not be wrong
+					out_en		   <= 1;
 					counter_32_upp <= counter_32_upp;
 				end else if (req_i && atomic_i) begin 
 					low_or_high    <= 0;
-					counter_32_low <= 0;
+					out_en		   <= 1;
 					counter_32_upp <= counter_32_upp;
 				end else begin 
 					low_or_high    <= 0;
-					counter_32_low <= 0;
+					out_en		   <= 0;
 					counter_32_upp <= counter_32_upp;
 				end 
 			end
