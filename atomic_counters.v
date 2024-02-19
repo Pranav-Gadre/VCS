@@ -106,6 +106,9 @@
 	  
 	* count_o value at cycle T13.
 	
+	* When in the second state, if the atomic_i is de-asrted, only then the output 
+	  should be the upper 32 bits of the counter.
+	
 	* Request can be a pulse or can get back to back multiple requests
 	
     * The acknowledge output must be given one cycle after the request is asserted
@@ -115,7 +118,10 @@
    -- But it DOES NOT necessarily means that the two REQs will be consecutive
     * The first request will always have the atomic_i input asserted
    -- Only the REQ that has atomic_i asrted, will be considered FIRST
-      And corresponding DATA be sent
+      And corresponding DATA be sent. And UNLESS First REQ comes we are not sending 
+	  any data to the output.	
+   -- Specifically, what Behaviour I see is if (POSEDGE REQ_I) is not accompanied with
+	  atomic_i, I am not going to output anything.
     * The second request will not have the atomic_i input asserted
    -- only the REQ that does not have atomic_i asrsted, will be considered SECOND
       And corresponding DATA be sent
@@ -179,19 +185,25 @@ module atomic_counters (
 	reg  state;
 	reg  ack;
 	reg  reset_ff;
+	reg  reset_ff1;
+	reg  low_or_high;
 	
 	localparam FIRST  = 1'd0;
 	localparam SECOND = 1'd1; 
 	
 	assign ack_o   = ack;
-	assign count_o = counter_32_low;       
+//	assign count_o = counter_32_low;       
+//  How will I do single copy atomic ops with this line below?
+//	assign count_o = (low_or_high) ? counter[31:0] : counter [63:32];
+	assign count_o = (low_or_high) ? counter[31:0] : counter_32_upp;
 	
 	always_ff @(posedge clk or posedge reset) begin
-		reset_ff <= reset;
+		reset_ff  <= reset;		// these flops will initially have X as value.		
+		reset_ff1 <= reset_ff;  // these flops will initially have X as value.
 		if (reset) begin 
 			counter <= 0;
 		end else begin
-			counter <= ((!reset) && reset_ff) ? count : 
+			counter <= ((!reset_ff) && reset_ff1) ? count_q : 
 			           (trig_i) ? counter + 1 : counter;
 		//	counter <= (trig_i) ? counter + 1 : counter;
 		end
@@ -199,32 +211,47 @@ module atomic_counters (
 	
 	always_ff @(posedge clk or posedge reset) begin 
 		if (reset) begin 
+			state		   <= 0;
 			counter_32_low <= 0;
 			counter_32_upp <= 0;
 			ack		       <= 0;
-			state		   <= 0;
+			low_or_high    <= 0;
 		end else begin
 			ack	<= req_i;
 			case (state) 
 			FIRST : begin 
 				if (req_i && atomic_i) begin 
 					state     	   <= SECOND;
-					counter_32_low <= counter[31:0];
+					low_or_high    <= 0;
+					counter_32_low <= 0;
 					counter_32_upp <= counter[63:32];
-				if (req_i && (!atomic_i)) begin 
+				end else if (req_i && (!atomic_i)) begin 
 					state		   <= SECOND;
-					counter_32_low <= counter[31:0];
+					low_or_high    <= 0;
+					counter_32_low <= 0;
 					counter_32_upp <= 0;
 				end else begin
 					state 		   <= FIRST;
+					low_or_high	   <= 0;
 					counter_32_low <= 0;
 					counter_32_upp <= 0;
 				end 
 			end 
 			SECOND: begin 
 				state		   <= FIRST;
-				counter_32_low <= counter_32_upp; // may not be wrong
-				counter_32_upp <= counter_32_upp;
+				if (req_i && (!atomic_i)) begin 
+					low_or_high    <= 1;
+					counter_32_low <= 0; // may not be wrong
+					counter_32_upp <= counter_32_upp;
+				end else if (req_i && atomic_i) begin 
+					low_or_high    <= 0;
+					counter_32_low <= 0;
+					counter_32_upp <= counter_32_upp;
+				end else begin 
+					low_or_high    <= 0;
+					counter_32_low <= 0;
+					counter_32_upp <= counter_32_upp;
+				end 
 			end
 			endcase
 		end
