@@ -185,16 +185,12 @@ module atomic_counters (
 	// Write your logic here
 	reg  [63:0] counter;
 	reg  [31:0] counter_32_upp;
-//	reg  [31:0] counter_32_low; 	// not required anymore
 	reg  state;
 	reg  ack;
-//	reg  ack1;
 	reg  req_i_d;
 	reg  out_en;
 	reg  load;
 	reg  load_d;
-//	reg  reset_ff;
-//	reg  reset_ff1;
 	reg  low_or_high;
 	wire req_i_posedge;
 	
@@ -202,9 +198,6 @@ module atomic_counters (
 	localparam SECOND = 1'd1; 
 	
 	assign ack_o   = ack;
-//	assign count_o = counter_32_low;       
-//  How will I do single copy atomic ops with this line below?
-//	assign count_o = (low_or_high) ? counter[31:0] : counter [63:32];
 	assign count_o = (!out_en) ? 32'd0 :
 					 (low_or_high) ? counter_32_upp : counter[31:0];
 	
@@ -212,8 +205,6 @@ module atomic_counters (
 	assign count = (load_d) ? counter : count_q;
 	
 	always_ff @(posedge clk or posedge reset) begin
-	//	reset_ff  <= reset;		// these flops will initially have X as value.		
-	//	reset_ff1 <= reset_ff;  // these flops will initially have X as value.
 		if (reset) begin 
 			counter <= 0;
 			load	<= 0;
@@ -223,11 +214,6 @@ module atomic_counters (
 			load_d  <= load;
 			counter <= 	(!load)  ? count : 
 						(trig_i) ? counter + 1 : counter;
-		//	counter <= 	((!load_d) && load) ? count_q : 
-		//				(trig_i) ? counter + 1 : counter;
-		//	counter <= ((!reset_ff) && reset_ff1) ? count_q : 
-		//	           (trig_i) ? counter + 1 : counter;
-		//	counter <= (trig_i) ? counter + 1 : counter;
 		end
 	end 
 	
@@ -249,9 +235,9 @@ module atomic_counters (
                     low_or_high    <= 0;
 					out_en		   <= 1;
                     counter_32_upp <= counter[63:32];
-                end else if (req_i_posedge && (!atomic_i)) begin // Earlier it was req_i && (!atomic_i))
-                    state		   <= FIRST; // Earlier it was SECOND, Now making it to FIRST
-                    low_or_high    <= 0;	// 	Earlier it was 0, which will out the lower 32 count value
+                end else if (req_i_posedge && (!atomic_i)) begin 
+                    state		   <= FIRST; 
+                    low_or_high    <= 0;	
                     out_en		   <= 0;
                     counter_32_upp <= 0;
                 end else begin
