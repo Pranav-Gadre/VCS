@@ -1,4 +1,6 @@
-// 
+//  QUESTION DETAILS:
+//
+//
 //  While working on the next generation SoC you were asked to design a 64-bit event counter 
 //  which would be interfaced with a 32-bit bus controlled via a microcontroller. 
 //	The 64-bit counter is incremented whenever a trigger input is seen. 
