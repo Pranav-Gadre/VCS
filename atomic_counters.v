@@ -191,8 +191,10 @@ module atomic_counters (
 //	reg  ack1;
 	reg  req_i_d;
 	reg  out_en;
-	reg  reset_ff;
-	reg  reset_ff1;
+	reg  load;
+	reg  load_d;
+//	reg  reset_ff;
+//	reg  reset_ff1;
 	reg  low_or_high;
 	wire req_i_posedge;
 	
@@ -207,15 +209,24 @@ module atomic_counters (
 					 (low_or_high) ? counter_32_upp : counter[31:0];
 	
 	assign req_i_posedge = (req_i && (!req_i_d));
+	assign count = (load_d) ? counter : count_q;
 	
 	always_ff @(posedge clk or posedge reset) begin
-		reset_ff  <= reset;		// these flops will initially have X as value.		
-		reset_ff1 <= reset_ff;  // these flops will initially have X as value.
+	//	reset_ff  <= reset;		// these flops will initially have X as value.		
+	//	reset_ff1 <= reset_ff;  // these flops will initially have X as value.
 		if (reset) begin 
 			counter <= 0;
+			load	<= 0;
+			load_d	<= 0;
 		end else begin
-			counter <= ((!reset_ff) && reset_ff1) ? count_q : 
-			           (trig_i) ? counter + 1 : counter;
+			load 	<= 1;
+			load_d  <= load;
+			counter <= 	(!load)  ? count : 
+						(trig_i) ? counter + 1 : counter;
+		//	counter <= 	((!load_d) && load) ? count_q : 
+		//				(trig_i) ? counter + 1 : counter;
+		//	counter <= ((!reset_ff) && reset_ff1) ? count_q : 
+		//	           (trig_i) ? counter + 1 : counter;
 		//	counter <= (trig_i) ? counter + 1 : counter;
 		end
 	end 
